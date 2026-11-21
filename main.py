@@ -31,7 +31,8 @@ import os
 import shutil
 import sys
 
-from PIL import Image, ImageDraw, ImageFont
+# Pillow is imported lazily inside the functions that draw, so the
+# no-argument delivery path below runs on the standard library alone.
 
 # ---------------------------------------------------------------- canvas
 
@@ -77,6 +78,8 @@ def font(kind, size):
                 break
         if path is None:
             raise FileNotFoundError("no font file found for %r" % (kind,))
+        from PIL import ImageFont
+
         _font_cache[key] = ImageFont.truetype(path, size)
     return _font_cache[key]
 
@@ -469,6 +472,8 @@ def draw_briefs(d):
 
 def render(path=ENTRY_PNG):
     """Build the image from the data tables and save it as a PNG."""
+    from PIL import Image, ImageDraw
+
     img = Image.new("RGB", (W, H), PAPER)
     d = ImageDraw.Draw(img)
     draw_masthead(d)
@@ -495,9 +500,13 @@ def validate(path):
         raise ValueError("%s is not a PNG file" % path)
     if os.path.getsize(path) > MAX_BYTES:
         raise ValueError("%s is larger than 1 MiB" % path)
-    with Image.open(path) as img:
-        if img.width > MAX_SIDE or img.height > MAX_SIDE:
-            raise ValueError("%s is larger than 1024x1024" % path)
+    with open(path, "rb") as fh:
+        fh.seek(16)
+        ihdr = fh.read(8)
+    width = int.from_bytes(ihdr[0:4], "big")
+    height = int.from_bytes(ihdr[4:8], "big")
+    if width > MAX_SIDE or height > MAX_SIDE:
+        raise ValueError("%s is larger than 1024x1024" % path)
 
 
 def deliver():
